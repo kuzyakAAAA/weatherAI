@@ -1,19 +1,22 @@
+# подключаем asyncpg для работы с postgresql и json для сериализации погоды
 import asyncpg
 import json
 from config import DATABASE_URL
 
 class Database:
     def __init__(self):
+        # пул соединений будет создан позже в init_pool
         self.pool = None
 
     async def init_pool(self):
-        """Создаёт пул соединений и инициализирует таблицы"""
+        # создаём пул соединений с бд, минимум 1, максимум 10
         self.pool = await asyncpg.create_pool(DATABASE_URL, min_size=1, max_size=10)
+        # создаём таблицы, если их ещё нет
         await self._init_tables()
 
     async def _init_tables(self):
+        # создаём таблицы users и history с нужными полями
         async with self.pool.acquire() as conn:
-            # Таблица users
             await conn.execute("""
                 CREATE TABLE IF NOT EXISTS users (
                     user_id BIGINT PRIMARY KEY,
@@ -22,7 +25,6 @@ class Database:
                     created_at TIMESTAMP DEFAULT NOW()
                 )
             """)
-            # Таблица history
             await conn.execute("""
                 CREATE TABLE IF NOT EXISTS history (
                     id SERIAL PRIMARY KEY,
@@ -36,6 +38,7 @@ class Database:
             """)
 
     async def get_user(self, user_id: int):
+        # получаем стиль и предпочтительный город пользователя по его id
         async with self.pool.acquire() as conn:
             row = await conn.fetchrow(
                 "SELECT style, preferred_city FROM users WHERE user_id = $1",
@@ -46,6 +49,7 @@ class Database:
             return None
 
     async def save_user(self, user_id: int, style: str = "casual", preferred_city: str = None):
+        # сохраняем или обновляем данные пользователя (upsert)
         async with self.pool.acquire() as conn:
             await conn.execute("""
                 INSERT INTO users (user_id, style, preferred_city)
@@ -55,6 +59,7 @@ class Database:
             """, user_id, style, preferred_city)
 
     async def update_style(self, user_id: int, style: str):
+        # обновляем только стиль пользователя
         async with self.pool.acquire() as conn:
             await conn.execute(
                 "UPDATE users SET style = $1 WHERE user_id = $2",
@@ -62,6 +67,7 @@ class Database:
             )
 
     async def save_history(self, user_id: int, city: str, weather: dict, advice: str):
+        # сохраняем запрос и ответ в историю, погоду сериализуем в json
         weather_json = json.dumps(weather, ensure_ascii=False)
         async with self.pool.acquire() as conn:
             await conn.execute("""
@@ -70,5 +76,6 @@ class Database:
             """, user_id, city, weather_json, advice)
 
     async def close(self):
+        # закрываем все соединения из пула
         if self.pool:
             await self.pool.close()
