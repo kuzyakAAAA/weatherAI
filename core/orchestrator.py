@@ -71,7 +71,7 @@ class OutfitOrchestrator:
             f"{date_line}"
             f"📍 {weather['city']}, {weather['country']}\n"
             f"🌡 {weather['temp']}°C, ощущается как {weather['feels_like']}°C\n"
-            f"☁️ {weather['condition']}\n"
+            f"☁️ {weather['condition'].capitalize()}\n"
             f"💨 Ветер {weather['wind_speed']} м/с\n"
             f"💧 Влажность {weather['humidity']}%\n\n"
             f"🧥 Рекомендация:\n{advice}"
