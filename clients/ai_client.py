@@ -1,20 +1,25 @@
+# импортируем aiohttp и asyncio для асинхронных запросов
 import aiohttp
 import asyncio
 import logging
 from config import MISTRAL_API_KEY
 
+# клиент для генерации рекомендаций через Mistral AI
 class MistralAIClient:
+    # инициализация клиента с API ключом
     def __init__(self):
         self.api_key = MISTRAL_API_KEY
         self.base_url = "https://api.mistral.ai/v1/chat/completions"
         self.model = "mistral-tiny"
 
+    # генерация совета на основе погоды, стиля и активности
     async def generate_advice(self, weather: dict, user_style: str = "casual", activity: str = "walk") -> str:
         temp = weather.get("temp", 0)
         feels_like = weather.get("feels_like", temp)
         condition = weather.get("condition", "ясно")
         wind_speed = weather.get("wind_speed", 0)
 
+        # формируем prompt для AI
         prompt = f"""
 Ты эксперт по одежде. Дай один короткий совет (2-3 предложения) без списков.
 
@@ -25,6 +30,7 @@ class MistralAIClient:
         headers = {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
         payload = {"model": self.model, "messages": [{"role": "user", "content": prompt}], "temperature": 0.5, "max_tokens": 400}
 
+        # делаем асинхронный POST запрос к API
         timeout = aiohttp.ClientTimeout(total=15)
         try:
             async with aiohttp.ClientSession(timeout=timeout) as session:
@@ -43,6 +49,7 @@ class MistralAIClient:
             logging.error(f"Exception calling Mistral: {e}")
             return self._fallback_advice(weather)
 
+    # fallback совет если AI недоступен
     def _fallback_advice(self, weather: dict) -> str:
         temp = weather.get("temp", 0)
         if temp < -10:
