@@ -1,21 +1,21 @@
-# подключаем asyncpg для работы с postgresql и json для сериализации погоды
 import asyncpg
 import json
+import logging
 from config import DATABASE_URL
 
 class Database:
     def __init__(self):
-        # пул соединений будет создан позже в init_pool
         self.pool = None
 
     async def init_pool(self):
-        # создаём пул соединений с бд, минимум 1, максимум 10
-        self.pool = await asyncpg.create_pool(DATABASE_URL, min_size=1, max_size=10)
-        # создаём таблицы, если их ещё нет
-        await self._init_tables()
+        try:
+            self.pool = await asyncpg.create_pool(DATABASE_URL, min_size=1, max_size=10)
+            await self._init_tables()
+        except Exception as e:
+            logging.error(f"DB pool init error: {e}")
+            raise
 
     async def _init_tables(self):
-        # создаём таблицы users и history с нужными полями
         async with self.pool.acquire() as conn:
             await conn.execute("""
                 CREATE TABLE IF NOT EXISTS users (
@@ -33,42 +33,28 @@ class Database:
                     weather_json TEXT,
                     advice TEXT,
                     timestamp TIMESTAMP DEFAULT NOW(),
-                    FOREIGN KEY (user_id) REFERENCES users (user_id)
+                    FOREIGN KEY (user_id) REFERENCES users(user_id)
                 )
             """)
 
+    def _serialize_weather(self, weather: dict) -> str:
+        return json.dumps(weather, ensure_ascii=False)
+
     async def get_user(self, user_id: int):
-        # получаем стиль и предпочтительный город пользователя по его id
         async with self.pool.acquire() as conn:
-            row = await conn.fetchrow(
-                "SELECT style, preferred_city FROM users WHERE user_id = $1",
-                user_id
-            )
-            if row:
-                return {"style": row["style"], "preferred_city": row["preferred_city"]}
-            return None
+            row = await conn.fetchrow("SELECT style, preferred_city FROM users WHERE user_id = $1", user_id)
+            return {"style": row["style"], "preferred_city": row["preferred_city"]} if row else None
 
     async def save_user(self, user_id: int, style: str = "casual", preferred_city: str = None):
-        # сохраняем или обновляем данные пользователя (upsert)
         async with self.pool.acquire() as conn:
             await conn.execute("""
                 INSERT INTO users (user_id, style, preferred_city)
                 VALUES ($1, $2, $3)
-                ON CONFLICT (user_id) DO UPDATE
-                SET style = $2, preferred_city = $3
+                ON CONFLICT (user_id) DO UPDATE SET style=$2, preferred_city=$3
             """, user_id, style, preferred_city)
 
-    async def update_style(self, user_id: int, style: str):
-        # обновляем только стиль пользователя
-        async with self.pool.acquire() as conn:
-            await conn.execute(
-                "UPDATE users SET style = $1 WHERE user_id = $2",
-                style, user_id
-            )
-
     async def save_history(self, user_id: int, city: str, weather: dict, advice: str):
-        # сохраняем запрос и ответ в историю, погоду сериализуем в json
-        weather_json = json.dumps(weather, ensure_ascii=False)
+        weather_json = self._serialize_weather(weather)
         async with self.pool.acquire() as conn:
             await conn.execute("""
                 INSERT INTO history (user_id, city, weather_json, advice)
@@ -76,6 +62,5 @@ class Database:
             """, user_id, city, weather_json, advice)
 
     async def close(self):
-        # закрываем все соединения из пула
         if self.pool:
             await self.pool.close()
