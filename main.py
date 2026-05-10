@@ -1,10 +1,19 @@
 # импортируем стандартные и внешние библиотеки
-import logging
-import re
-import asyncio
-from datetime import datetime
-from telegram import Update, ReplyKeyboardMarkup
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
+import logging # для логирования ошибок и информации
+import re # для обработки регулярных выражений при проверке формата даты
+import asyncio # для работы с асинхронными функциями и событийным циклом
+from datetime import datetime # для работы с датами и временем
+from telegram import (
+    Update, # для получения информации о сообщении и пользователе 
+    ReplyKeyboardMarkup # для создания клавиатур и сообщений
+)
+from telegram.ext import (
+    Application, # для создания и управления ботом
+    CommandHandler, # для обработки команд, таких как /start и /style
+    MessageHandler, # для обработки обычных сообщений от пользователей
+    filters, # для фильтрации сообщений по типу (текст, команды и т.д.)
+    ContextTypes # для передачи контекста между обработчиками и сохранения состояния пользователя
+)
 from config import BOT_TOKEN
 from core.orchestrator import OutfitOrchestrator
 from db.database import Database
@@ -45,17 +54,17 @@ async def safe_reply(update, text, **kwargs):
 
 # функция инициализации базы данных и orchestrator
 async def init_db():
-    global db, orchestrator
-    db = Database()
-    await db.init_pool()
-    orchestrator = OutfitOrchestrator(db=db)
+    global db, orchestrator # объявляем глобальные переменные для использования в других функциях
+    db = Database() 
+    await db.init_pool() # инициализируем пул соединений с базой данных
+    orchestrator = OutfitOrchestrator(db=db) # создаём экземпляр orchestrator, передавая ему базу данных для доступа к данным пользователей и прогнозам погоды
 
 # обработчик команды /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     # пытаемся получить пользователя из базы
     try:
-        user = await orchestrator.db.get_user(user_id)
+        user = await orchestrator.db.get_user(user_id) 
     except Exception as e:
         logging.error(f"DB error: {e}")
         await safe_reply(update, "❌ Ошибка базы данных. Попробуйте позже.")
@@ -128,10 +137,10 @@ async def handle_date_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # обработка конкретной даты формата YYYY-MM-DD
     elif re.match(r'\d{4}-\d{2}-\d{2}', text):
         target_date = text
-        today = datetime.now().date()
+        today = datetime.now().date() # получаем объект сегодняшней даты
         # проверяем корректность даты
         try:
-            dt = datetime.strptime(target_date, "%Y-%m-%d").date()
+            dt = datetime.strptime(target_date, "%Y-%m-%d").date() # преобразуем строку в объект даты
             if dt < today:
                 await safe_reply(update, MSG_DATE_PAST)
                 return
