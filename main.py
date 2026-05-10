@@ -116,7 +116,7 @@ async def handle_date_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if text == "📅 Сегодня":
         await safe_reply(update, "🔍 Смотрю погоду на сегодня...")
         recommendation = await orchestrator.get_recommendation(user_id, city)
-        await safe_reply(update, recommendation)
+        await safe_reply(update, recommendation, parse_mode='MARKDOWN')
         await safe_reply(update, MSG_NEW_REQUEST)
         context.user_data.clear()
 
@@ -147,7 +147,7 @@ async def handle_date_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         # получаем прогноз через orchestrator
         recommendation = await orchestrator.get_recommendation_for_date(user_id, city, target_date)
-        await safe_reply(update, recommendation)
+        await safe_reply(update, recommendation, parse_mode='MARKDOWN')
         # сообщение о готовности к новому запросу
         await safe_reply(update, MSG_NEW_REQUEST)
         context.user_data.clear()
