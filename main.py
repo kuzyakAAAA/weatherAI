@@ -188,15 +188,14 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # спрашиваем дату
     await safe_reply(update, "📅 На какую дату нужен прогноз?", reply_markup=date_keyboard)
 
-# обработка передачи локации (не поддерживается)
-async def handle_location(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await safe_reply(update, MSG_LOCATION_NOT_SUPPORTED)
-
 # функция запуска бота
 def main():
     # создаём событийный цикл
-    loop = asyncio.new_event_loop()
+    # создается отдельный планировщик задач
+    loop = asyncio.new_event_loop() 
+    # а здесь мы его выбираем, как рабощий для нашего кода
     asyncio.set_event_loop(loop)
+    # установка соединения с бд
     loop.run_until_complete(init_db())
 
     # создаём приложение Telegram
@@ -207,7 +206,6 @@ def main():
     app.add_handler(CommandHandler("cancel", cancel_command))
     # добавляем обработчики сообщений и локации
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-    app.add_handler(MessageHandler(filters.LOCATION, handle_location))
 
     # запускаем бота
     app.run_polling()
