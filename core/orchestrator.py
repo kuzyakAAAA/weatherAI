@@ -11,6 +11,7 @@ STYLES = ("casual", "business", "sport")
 class OutfitOrchestrator:
     # инициализация orchestrator с клиентами и базой
     def __init__(self, db: Database = None):
+        # если база данных не передана, создаём новую
         self.db = db if db else Database()
         # клиент для получения погоды
         self.weather_client = WeatherClient()

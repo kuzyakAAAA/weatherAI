@@ -17,7 +17,9 @@ class WeatherClient:
     async def get_weather(self, city: str):
         params = {"q": city, "appid": self.api_key, "units": "metric", "lang": "ru"}
         try:
+            # создается сессия для запроса к OpenWeather API
             async with aiohttp.ClientSession(timeout=self.timeout) as session:
+                # отправка запроса к API и обработка ответа
                 async with session.get(self.current_url, params=params) as resp:
                     if resp.status != 200:
                         error_data = await resp.json()
@@ -64,7 +66,8 @@ class WeatherClient:
             logging.error(f"WeatherClient get_forecast_for_date error for '{city}' on {target_date}: {e}")
             raise
 
-        # выбираем прогноз, ближайший к полудню
+        # выбираем прогноз, ближайший к полудню на целевую дату
+        # в API OpenWeather прогнозы идут с шагом 3 часа, поэтому ищем запись с временем, наиболее близким к 12:00
         best_entry = None
         best_diff = 24
         for entry in data.get("list", []):
