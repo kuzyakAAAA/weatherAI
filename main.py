@@ -3,29 +3,35 @@ import logging # для логирования ошибок и информац�
 import re # для обработки регулярных выражений при проверке формата даты
 import asyncio # для работы с асинхронными функциями и событийным циклом
 from datetime import datetime # для работы с датами и временем
+
 from telegram import (
-    Update, # для получения информации о сообщении и пользователе 
+    Update, # для получения информации о сообщении и пользователе
     ReplyKeyboardMarkup, # для создания клавиатур и сообщений
     ReplyKeyboardRemove # для удаления клавиатуры после выбора
 )
+
 from telegram.ext import (
     Application, # для создания и управления ботом
     CommandHandler, # для обработки команд, таких как /start и /style
     MessageHandler, # для обработки обычных сообщений от пользователей
-    filters, # для фильтрации сообщений по типу (текст, команды и т.д.)
+    filters, # для фильтрации сообщений по типу: текст, команда и т.д.
     ContextTypes # для передачи контекста между обработчиками и сохранения состояния пользователя
 )
+
 from config import BOT_TOKEN
 from core.orchestrator import OutfitOrchestrator
 from db.database import Database
 
+
 # настройка логирования для дебага
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+
 
 # константы для стилей и клавиатур
 STYLES = ("casual", "business", "sport")
 STYLE_BUTTONS = [["casual", "business", "sport"]]
 DATE_BUTTONS = [["📅 Сегодня", "📆 Другая дата"]]
+
 
 # константы текстовых сообщений для бота
 MSG_CHOOSE_STYLE = "👋 Привет! Выбери свой стиль одежды:"
@@ -36,11 +42,11 @@ MSG_DATE_PAST = "❌ Дата не может быть в прошлом."
 MSG_DATE_FUTURE = "❌ Прогноз доступен только на ближайшие 5 дней."
 MSG_DATE_INVALID = "❌ Неверный формат даты. Используйте ГГГГ-ММ-ДД."
 MSG_START_FIRST = "👋 Привет! Начните с команды /start."
-MSG_LOCATION_NOT_SUPPORTED = "Пока поддерживаются только названия городов на английском."
 
-# глобальные переменные для базы данных и orchestrator
-db: Database = None
+
+# глобальная переменная для orchestrator
 orchestrator: OutfitOrchestrator = None
+
 
 # создаём клавиатуры для выбора стиля и даты
 style_keyboard = ReplyKeyboardMarkup(STYLE_BUTTONS, resize_keyboard=True, one_time_keyboard=True)
@@ -57,10 +63,12 @@ async def safe_reply(update, text, **kwargs):
 
 # функция инициализации базы данных и orchestrator
 async def init_db():
-    global db, orchestrator # объявляем глобальные переменные для использования в других функциях
-    db = Database()
-    await db.init_pool() # инициализируем пул соединений с базой данных
-    orchestrator = OutfitOrchestrator(db=db) # создаём экземпляр orchestrator, передавая ему базу данных для доступа к данным пользователей и прогнозам погоды
+    global orchestrator # объявляем глобальную переменную для использования в других функциях
+
+    database = Database()
+    await database.init_pool() # инициализируем подключение к базе данных
+
+    orchestrator = OutfitOrchestrator(db=database) # создаём orchestrator и передаём ему базу данных
 
 
 # обработчик команды /start
@@ -80,7 +88,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await safe_reply(update, MSG_CHOOSE_STYLE, reply_markup=style_keyboard)
         context.user_data["awaiting_style"] = True
     else:
-        # если есть, приветствуем и предлагаем ввести город
+        # если пользователь есть, приветствуем и предлагаем ввести город
         await safe_reply(update, f"С возвращением! Твой стиль: {user['style']}.\n{MSG_CITY_PROMPT}")
 
 
@@ -93,7 +101,11 @@ async def style_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # обработчик команды /cancel для сброса диалога
 async def cancel_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data.clear()
-    await safe_reply(update, "Диалог сброшен. Напишите /start для начала.", reply_markup=ReplyKeyboardRemove())
+    await safe_reply(
+        update,
+        "Диалог сброшен. Напишите /start для начала.",
+        reply_markup=ReplyKeyboardRemove()
+    )
 
 
 # обработчик выбора стиля пользователем
@@ -115,9 +127,10 @@ async def handle_style(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await safe_reply(update, "❌ Ошибка базы данных при сохранении стиля.")
         return
 
-    # очищаем состояние пользователя после выбора
+    # очищаем состояние пользователя после выбора стиля
     context.user_data.clear()
 
+    # сообщаем пользователю, что стиль сохранён, и просим ввести город
     await safe_reply(
         update,
         f"Отлично! Твой стиль обновлён: {style}. {MSG_CITY_PROMPT}",
@@ -131,7 +144,7 @@ async def handle_date_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     city = context.user_data.get("temp_city")
 
-    # если город не указан, просим сначала ввести город
+    # если город не указан, просим сначала начать с /start
     if not city:
         context.user_data["awaiting_date"] = False
         await safe_reply(update, MSG_START_FIRST, reply_markup=ReplyKeyboardRemove())
@@ -145,17 +158,20 @@ async def handle_date_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=ReplyKeyboardRemove()
         )
 
+        # получаем рекомендацию на сегодня через orchestrator
         recommendation = await orchestrator.get_recommendation(user_id, city)
 
-        await safe_reply(update, recommendation, parse_mode='MARKDOWN')
+        # отправляем пользователю рекомендацию
+        await safe_reply(update, recommendation, parse_mode="MARKDOWN")
+
+        # сообщаем, что бот готов к новому запросу
         await safe_reply(update, MSG_NEW_REQUEST)
 
+        # очищаем состояние пользователя после завершения сценария
         context.user_data.clear()
 
     # обработка варианта "другая дата"
     elif text == "📆 Другая дата":
-        context.user_data["awaiting_custom_date"] = True
-
         await safe_reply(
             update,
             "Введите дату в формате ГГГГ-ММ-ДД (максимум +5 дней):",
@@ -163,9 +179,9 @@ async def handle_date_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
     # обработка конкретной даты формата YYYY-MM-DD
-    elif re.match(r'\d{4}-\d{2}-\d{2}', text):
+    elif re.fullmatch(r"\d{4}-\d{2}-\d{2}", text):
         target_date = text
-        today = datetime.now().date() # получаем объект сегодняшней даты
+        today = datetime.now().date() # получаем сегодняшнюю дату
 
         # проверяем корректность даты
         try:
@@ -193,11 +209,13 @@ async def handle_date_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # получаем прогноз через orchestrator
         recommendation = await orchestrator.get_recommendation_for_date(user_id, city, target_date)
 
-        await safe_reply(update, recommendation, parse_mode='MARKDOWN')
+        # отправляем пользователю рекомендацию
+        await safe_reply(update, recommendation, parse_mode="MARKDOWN")
 
         # сообщение о готовности к новому запросу
         await safe_reply(update, MSG_NEW_REQUEST)
 
+        # очищаем состояние пользователя после завершения сценария
         context.user_data.clear()
 
     # если введён некорректный текст
@@ -209,12 +227,13 @@ async def handle_date_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
 
-    # проверка состояния пользователя
+    # если бот ждёт выбор стиля, передаём сообщение в обработчик стиля
     if context.user_data.get("awaiting_style"):
         await handle_style(update, context)
         return
 
-    if context.user_data.get("awaiting_date") or context.user_data.get("awaiting_custom_date"):
+    # если бот ждёт выбор даты или ввод конкретной даты, передаём сообщение в обработчик даты
+    if context.user_data.get("awaiting_date"):
         await handle_date_input(update, context)
         return
 
@@ -231,25 +250,25 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await safe_reply(update, MSG_START_FIRST)
         return
 
-    # сохраняем введённый город
+    # сохраняем введённый город во временное состояние пользователя
     city = update.message.text.strip()
     context.user_data["temp_city"] = city
     context.user_data["awaiting_date"] = True
 
-    # спрашиваем дату
+    # спрашиваем дату прогноза
     await safe_reply(update, "📅 На какую дату нужен прогноз?", reply_markup=date_keyboard)
 
 
 # функция запуска бота
 def main():
     # создаём событийный цикл
-    # создается отдельный планировщик задач
+    # создаётся отдельный планировщик задач
     loop = asyncio.new_event_loop()
 
-    # а здесь мы его выбираем, как рабощий для нашего кода
+    # выбираем созданный цикл как рабочий для нашего кода
     asyncio.set_event_loop(loop)
 
-    # установка соединения с бд
+    # инициализируем подключение к базе данных и orchestrator
     loop.run_until_complete(init_db())
 
     # создаём приложение Telegram
@@ -260,12 +279,11 @@ def main():
     app.add_handler(CommandHandler("style", style_command))
     app.add_handler(CommandHandler("cancel", cancel_command))
 
-    # добавляем обработчики сообщений и локации
+    # добавляем обработчик обычных текстовых сообщений
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
     # запускаем бота
     app.run_polling()
-
 
 # запуск бота
 if __name__ == "__main__":
