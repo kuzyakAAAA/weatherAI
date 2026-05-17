@@ -1,79 +1,76 @@
-# 👕 Weather Outfit Assistant — Telegram бот
+# 👕 Weather Outfit Assistant
 
-Telegram-бот, который помогает подобрать одежду по погоде с использованием AI (Mistral AI).  
-Пользователь указывает город и дату, бот получает прогноз погоды и генерирует персонализированную рекомендацию с учётом выбранного стиля: **casual / business / sport**.
+**Weather Outfit Assistant** — Telegram-бот, который подбирает одежду по погоде с помощью AI.
+
+Пользователь выбирает стиль одежды, вводит город и дату, а бот получает прогноз погоды через OpenWeatherMap и формирует рекомендацию через Mistral AI.
 
 ---
 
 ## ✨ Возможности
 
-- 📍 Получение погоды на **сегодня** или на любую дату в пределах 5 дней  
-- 🤖 AI‑рекомендации через **Mistral AI** (прямые HTTP-запросы, без сторонних библиотек)  
-- 👔 Выбор стиля одежды: casual, business, sport  
-- 💾 История запросов и сохранение настроек пользователя в **PostgreSQL**  
-- 🔄 Смена стиля в любой момент командой `/style`  
-- 🌐 Поддержка городов на английском языке (например, `Moscow`, `London`)  
-- 🧠 Fallback‑советы, если AI недоступен  
-- ❌ Команда `/cancel` для сброса диалога  
+- получение прогноза погоды по городу;
+- выбор даты: сегодня или другая дата в пределах ближайших 5 дней;
+- AI-рекомендации по одежде через Mistral AI;
+- выбор стиля одежды: `casual`, `business`, `sport`;
+- сохранение пользователей и истории запросов в PostgreSQL;
+- работа с базой данных через SQLAlchemy ORM;
+- смена стиля командой `/style`;
+- сброс диалога командой `/cancel`;
+- fallback-рекомендации, если AI временно недоступен.
 
 ---
 
-## 🏗 Архитектура проекта
+## 🏗 Структура проекта
 
-Проект построен по модульному принципу с асинхронными клиентами и Orchestrator:
-
-```
+```text
 weatherAI/
-├─ core/
-│ ├─ init.py
-│ └─ orchestrator.py # Orchestrator: связывает бота, AI и погоду
 ├─ clients/
-│ ├─ init.py
-│ ├─ ai_client.py # Mistral AI клиент
-│ └─ weather_client.py # OpenWeatherMap клиент
+│  ├─ __init__.py
+│  ├─ ai_client.py           # клиент Mistral AI
+│  └─ weather_client.py      # клиент OpenWeatherMap
+├─ core/
+│  ├─ __init__.py
+│  └─ orchestrator.py        # основная логика приложения
 ├─ db/
-│ ├─ init.py
-│ └─ database.py # PostgreSQL база данных
-├─ main.py # Telegram бот
-└─ config.py # Конфигурации (API ключи, токены)
+│  ├─ __init__.py
+│  ├─ database.py            # работа с PostgreSQL через SQLAlchemy
+│  └─ scheme_of_db.md        # описание структуры базы данных
+├─ __init__.py
+├─ main.py                   # Telegram-бот
+├─ config.py                 # конфигурация проекта
+├─ config.example.py         # пример конфигурации
+├─ requirements.txt          # зависимости
+└─ README.md
 ```
 
-
-**Компоненты:**
-
-- **API Client** — получение текущей погоды и прогноза на 5 дней (OpenWeatherMap)  
-- **AI Client** — генерация рекомендаций через Mistral AI (`aiohttp`) с fallback‑советами  
-- **DB** — асинхронная база PostgreSQL (`asyncpg`) с таблицами `users` и `history`  
-- **UI** — Telegram‑бот с интерактивными кнопками и управлением состояниями  
-- **Orchestrator** — управляет потоком данных и обработкой ошибок  
-
----
+## 🧩 Основные модули
+- main.py — запускает Telegram-бота, обрабатывает команды, сообщения и кнопки.
+- clients/weather_client.py — получает текущую погоду и прогноз через OpenWeatherMap API.
+- clients/ai_client.py — отправляет данные в Mistral AI и получает текстовую рекомендацию.
+- core/orchestrator.py — связывает бота, погоду, AI и базу данных.
+- db/database.py — сохраняет пользователей и историю запросов в PostgreSQL.
 
 ## 🛠 Технологии
 
-- Python 3.14+  
-- `python-telegram-bot` (v20+) — асинхронный фреймворк для бота  
-- `aiohttp` — асинхронные HTTP-запросы к API  
-- `asyncpg` — асинхронный драйвер PostgreSQL  
-- PostgreSQL — основная база данных  
-- OpenWeatherMap API — прогноз погоды  
-- Mistral AI API — генерация текстов (`mistral-tiny` бесплатный тариф)  
+- Python
+- python-telegram-bot
+- aiohttp
+- SQLAlchemy
+- asyncpg
+- PostgreSQL
+- OpenWeatherMap API
+- Mistral AI API
 
----
+## 💬 Команды бота
 
-## 📦 Установка и запуск
+- /start — начать работу с ботом;
+- /style — изменить стиль одежды;
+- /cancel — сбросить текущий диалог.
 
-### 1. Клонируем репозиторий
+## 🧪 Пример работы
 
-```bash
-git clone https://github.com/USERNAME/weatherAI.git
-cd weatherAI
-```
-
-### 2. Устанавливаем зависимости
-```
-python -m venv venv
-source venv/bin/activate   # Linux/macOS
-venv\Scripts\activate      # Windows
-pip install -r requirements.txt
-```
+- Пользователь запускает бота командой /start.
+- Выбирает стиль: casual, business или sport.
+- Вводит город, например Moscow.
+- Выбирает дату: сегодня или другую дату.
+- Бот отправляет рекомендацию по одежде с учётом погоды и выбранного стиля.

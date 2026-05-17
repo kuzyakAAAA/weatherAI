@@ -1,49 +1,91 @@
-# импортируем asyncpg и json
-import asyncpg
+# работа с базой данных через SQLAlchemy ORM
 import json
 import logging
+from datetime import datetime
+from typing import Optional
+
+from sqlalchemy import BigInteger, DateTime, ForeignKey, Integer, String, Text, func
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+
 from config import DATABASE_URL
 
-# класс работы с базой данных PostgreSQL
+
+# базовый класс для ORM-моделей SQLAlchemy
+class Base(DeclarativeBase):
+    pass
+
+
+# таблица users хранит пользователя, стиль одежды и предпочитаемый город
+class User(Base):
+    __tablename__ = "users"
+
+    user_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    style: Mapped[str] = mapped_column(String(50), nullable=False, default="casual", server_default="casual")
+    preferred_city: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, server_default=func.now())
+
+    history: Mapped[list["History"]] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
+
+
+# таблица history хранит историю запросов и советов
+class History(Base):
+    __tablename__ = "history"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.user_id"), nullable=False, index=True)
+    city: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    weather_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    advice: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    timestamp: Mapped[datetime] = mapped_column(DateTime, nullable=False, server_default=func.now())
+
+    user: Mapped[User] = relationship(back_populates="history")
+
+
+# класс работы с базой данных PostgreSQL через SQLAlchemy
 class Database:
     # инициализация объекта базы
     def __init__(self):
-        self.pool = None
+        self.engine: Optional[AsyncEngine] = None
+        self.session_factory: Optional[async_sessionmaker[AsyncSession]] = None
 
-    # инициализация пула соединений
+    # инициализация подключения к базе данных
+    # название init_pool сохранено, чтобы не менять main.py
     async def init_pool(self):
         try:
-            # заранее создаётся пул из 1 до 10 открытых подключений к базе, которые переиспользуются для выполнения запросов без постоянного переподключения
-            self.pool = await asyncpg.create_pool(DATABASE_URL, min_size=1, max_size=10)
+            self.engine = create_async_engine(
+                DATABASE_URL,
+                echo=False,
+                pool_pre_ping=True,
+            )
+
+            self.session_factory = async_sessionmaker(
+                bind=self.engine,
+                expire_on_commit=False,
+            )
+
             await self._init_tables()
+
         except Exception as e:
-            logging.error(f"DB pool init error: {e}")
-            raise # если не удалось создать пул, выбрасываем исключение, чтобы обработать его в main.py и не запускать бота без доступа к базе данных
+            logging.error(f"DB init error: {e}")
+            raise
 
     # создание таблиц, если их нет
     async def _init_tables(self):
-        async with self.pool.acquire() as conn: # получаем соединение из пула для выполнения запросов
-            # создаём таблицу users для хранения информации о пользователях и их стилях, а также таблицу history для хранения истории запросов и советов
-            await conn.execute(""" 
-                CREATE TABLE IF NOT EXISTS users (
-                    user_id BIGINT PRIMARY KEY,
-                    style TEXT DEFAULT 'casual',
-                    preferred_city TEXT,
-                    created_at TIMESTAMP DEFAULT NOW()
-                )
-            """)
-            # создаём таблицу history для хранения истории запросов и советов, связывая её с таблицей users через внешний ключ user_id
-            await conn.execute("""
-                CREATE TABLE IF NOT EXISTS history (
-                    id SERIAL PRIMARY KEY,
-                    user_id BIGINT,
-                    city TEXT,
-                    weather_json TEXT,
-                    advice TEXT,
-                    timestamp TIMESTAMP DEFAULT NOW(),
-                    FOREIGN KEY (user_id) REFERENCES users(user_id)
-                )
-            """)
+        if not self.engine:
+            raise RuntimeError("Database engine is not initialized")
+
+        async with self.engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+
+    # получение новой асинхронной сессии SQLAlchemy
+    def _session(self) -> AsyncSession:
+        if not self.session_factory:
+            raise RuntimeError("Database session factory is not initialized")
+        return self.session_factory()
 
     # сериализация словаря погоды в JSON для хранения в базе данных
     def _serialize_weather(self, weather: dict) -> str:
@@ -51,30 +93,50 @@ class Database:
 
     # получение пользователя по ID
     async def get_user(self, user_id: int):
-        async with self.pool.acquire() as conn:
-            # fetchrow возвращает одну строку результата запроса, которая соответствует пользователю с данным user_id, или None, если такого пользователя нет
-            row = await conn.fetchrow("SELECT style, preferred_city FROM users WHERE user_id = $1", user_id)
-            return {"style": row["style"], "preferred_city": row["preferred_city"]} if row else None
+        async with self._session() as session:
+            user = await session.get(User, user_id)
+            if not user:
+                return None
+            return {
+                "style": user.style,
+                "preferred_city": user.preferred_city,
+            }
 
     # сохранение пользователя в базе
     async def save_user(self, user_id: int, style: str = "casual", preferred_city: str = None):
-        async with self.pool.acquire() as conn:
-            await conn.execute("""
-                INSERT INTO users (user_id, style, preferred_city)
-                VALUES ($1, $2, $3)
-                ON CONFLICT (user_id) DO UPDATE SET style=$2, preferred_city=$3 # при сохранении пользователя, если пользователь с данным user_id уже существует, обновляем его стиль и предпочитаемый город, иначе создаём новую запись
-            """, user_id, style, preferred_city)
+        async with self._session() as session:
+            async with session.begin():
+                user = await session.get(User, user_id)
+
+                if user:
+                    user.style = style
+                    user.preferred_city = preferred_city
+                else:
+                    session.add(User(
+                        user_id=user_id,
+                        style=style,
+                        preferred_city=preferred_city,
+                    ))
 
     # сохранение истории запроса
     async def save_history(self, user_id: int, city: str, weather: dict, advice: str):
         weather_json = self._serialize_weather(weather)
-        async with self.pool.acquire() as conn:
-            await conn.execute("""
-                INSERT INTO history (user_id, city, weather_json, advice)
-                VALUES ($1, $2, $3, $4)
-            """, user_id, city, weather_json, advice)
 
-    # закрытие пула соединений
+        async with self._session() as session:
+            async with session.begin():
+                # на случай, если save_history вызвали до создания пользователя
+                user = await session.get(User, user_id)
+                if not user:
+                    session.add(User(user_id=user_id))
+
+                session.add(History(
+                    user_id=user_id,
+                    city=city,
+                    weather_json=weather_json,
+                    advice=advice,
+                ))
+
+    # закрытие соединений
     async def close(self):
-        if self.pool:
-            await self.pool.close()
+        if self.engine:
+            await self.engine.dispose()
