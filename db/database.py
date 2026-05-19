@@ -53,8 +53,8 @@ class User(Base):
     # один пользователь может иметь много записей в истории запросов
     history = relationship(
         "History",
-        back_populates="user",
-        cascade="all, delete-orphan",
+        back_populates="user", # связывает с полем user в модели History
+        cascade="all, delete-orphan", # при удалении пользователя удаляются все его записи в истории
     )
 
 
@@ -97,8 +97,8 @@ class History(Base):
 class Database:
     # инициализация объекта базы данных
     def __init__(self):
-        self.engine: AsyncEngine | None = None # здесь будет храниться подключение к базе данных
-        self.session_factory: async_sessionmaker[AsyncSession] | None = None # фабрика для создания сессий
+        self.engine = None # здесь будет храниться подключение к базе данных
+        self.session_factory = None # фабрика для создания сессий
 
     # инициализация подключения к базе данных
     # название init_pool сохранено, чтобы не менять main.py
@@ -108,14 +108,14 @@ class Database:
             self.engine = create_async_engine(
                 DATABASE_URL,
                 echo=False,
-                pool_pre_ping=True,
+                pool_pre_ping=True, # если соединение умерло, он попробует восстановить его
             )
 
             # создаём фабрику сессий
             # через неё дальше будут выполняться запросы к базе данных
             self.session_factory = async_sessionmaker(
                 bind=self.engine,
-                expire_on_commit=False,
+                expire_on_commit=False,  # SQLAlchemy после сохранения изменений считает данные объекта устаревшими и при следующем обращении к полю пытается заново загрузить их из базы.
             )
 
             # создаём таблицы, если они ещё не существуют
@@ -136,7 +136,7 @@ class Database:
         # открываем подключение и создаём все таблицы,
         # которые описаны через ORM-модели User и History
         async with self.engine.begin() as conn:
-            await conn.run_sync(Base.metadata.create_all)
+            await conn.run_sync(Base.metadata.create_all) # это синхронная функция SQLAlchemy, а у тебя подключение асинхронное. Поэтому используется специальный мост: conn.sync - выполни синхронную функцию создания таблиц внутри асинхронного подключения.
 
     # создание новой асинхронной сессии
     def _session(self) -> AsyncSession:
