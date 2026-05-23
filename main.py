@@ -103,7 +103,7 @@ async def cancel_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data.clear()
     await safe_reply(
         update,
-        "Диалог сброшен. Напишите /start для начала.",
+        "Диалог сброшен. Напишите '/start' для начала.",
         reply_markup=ReplyKeyboardRemove()
     )
 

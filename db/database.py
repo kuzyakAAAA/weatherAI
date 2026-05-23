@@ -14,8 +14,6 @@ from sqlalchemy import (
 )
 
 from sqlalchemy.ext.asyncio import (
-    AsyncEngine, # асинхронный движок подключения к базе данных
-    AsyncSession, # асинхронная сессия для работы с базой данных
     async_sessionmaker, # фабрика для создания асинхронных сессий
     create_async_engine, # функция для создания асинхронного engine
 )
@@ -139,7 +137,7 @@ class Database:
             await conn.run_sync(Base.metadata.create_all) # это синхронная функция SQLAlchemy, а у тебя подключение асинхронное. Поэтому используется специальный мост: conn.sync - выполни синхронную функцию создания таблиц внутри асинхронного подключения.
 
     # создание новой асинхронной сессии
-    def _session(self) -> AsyncSession:
+    def _session(self):
         # проверяем, что фабрика сессий уже создана
         if not self.session_factory:
             raise RuntimeError("Database session factory is not initialized")
