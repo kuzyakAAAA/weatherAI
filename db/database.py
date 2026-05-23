@@ -99,7 +99,6 @@ class Database:
         self.session_factory = None # фабрика для создания сессий
 
     # инициализация подключения к базе данных
-    # название init_pool сохранено, чтобы не менять main.py
     async def init_pool(self):
         try:
             # создаём асинхронный engine для подключения к PostgreSQL
@@ -134,7 +133,7 @@ class Database:
         # открываем подключение и создаём все таблицы,
         # которые описаны через ORM-модели User и History
         async with self.engine.begin() as conn:
-            await conn.run_sync(Base.metadata.create_all) # это синхронная функция SQLAlchemy, а у тебя подключение асинхронное. Поэтому используется специальный мост: conn.sync - выполни синхронную функцию создания таблиц внутри асинхронного подключения.
+            await conn.run_sync(Base.metadata.create_all) # это синхронная функция SQLAlchemy, а у меня подключение асинхронное. Поэтому используется специальный мост: conn.sync - выполни синхронную функцию создания таблиц внутри асинхронного подключения.
 
     # создание новой асинхронной сессии
     def _session(self):
