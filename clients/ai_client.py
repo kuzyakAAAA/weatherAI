@@ -27,8 +27,10 @@ class MistralAIClient:
 Стиль: {user_style}, активность: {activity}.
 Что надеть (головной убор, верх, обувь, аксессуары).
 """
+        # заголовки запроса
         headers = {"Authorization": f"Bearer {self.api_key}",
                     "Content-Type": "application/json"}
+        # данные запроса
         payload = {"model": self.model,
                     "messages": [{"role": "user", "content": prompt}],
                     "temperature": 0.5,
@@ -39,13 +41,14 @@ class MistralAIClient:
         
         # обрабатываем ответ и возвращаем совет, или фоллбек при ошибке
         try:
-            # создается сессия для запроса к Mistral API
+            # создается HTTP-сессия для запроса к Mistral API
             # async with гарантирует закрытие сессии после выполнения блока
             async with aiohttp.ClientSession(timeout=timeout) as session:
+                # отправка запроса
                 async with session.post(self.base_url, headers=headers, json=payload) as resp:
                     if resp.status != 200:
                         logging.error(f"Mistral API error {resp.status}: {await resp.text()}")
-                        # resp.text() читает текстовое содержимое HTTP-ответа сервера для логирования ошибки, а resp.json() читает и парсит JSON-ответ для получения данных. В случае ошибки мы логируем текст ответа, который может содержать сообщение об ошибке от сервера, а не пытаемся парсить JSON, который может быть некорректным при ошибке.
+                        # resp.text() читает текстовое содержимое HTTP-ответа сервера для логирования ошибки, а resp.json() читает и парсит JSON-ответ для получения данных
                         return self._fallback_advice(weather)
                     data = await resp.json()
                     advice = data.get("choices", [{}])[0].get("message", {}).get("content", "")

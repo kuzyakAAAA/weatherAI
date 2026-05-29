@@ -142,13 +142,15 @@ class Database:
 
         # открываем подключение и создаём все таблицы,
         # которые описаны через ORM-модели User и History
+        # begin() это интерпретация try and except
         async with self.engine.begin() as conn:
-            await conn.run_sync(Base.metadata.create_all) # это синхронная функция SQLAlchemy, а у меня подключение асинхронное. Поэтому используется специальный мост: conn.sync - выполни синхронную функцию создания таблиц внутри асинхронного подключения.
+            await conn.run_sync(Base.metadata.create_all) # это синхронная функция SQLAlchemy, а подключение асинхронное. Поэтому используется специальный мост: conn.sync - выполни синхронную функцию создания таблиц внутри асинхронного подключения.
 
     # создание новой асинхронной сессии
     def _session(self):
         # проверяем, что фабрика сессий уже создана
         if not self.session_factory:
+            # ручное создание ошибки 
             raise RuntimeError("Database session factory is not initialized")
 
         # возвращаем новую сессию для работы с базой данных
@@ -173,6 +175,7 @@ class Database:
     async def save_user(self, user_id: int, style: str = "casual"):
         async with self._session() as session:
             # открываем транзакцию
+            # begin() это интерпретация try and except
             async with session.begin():
                 # проверяем, есть ли уже такой пользователь в базе
                 user = await session.get(User, user_id)
@@ -198,6 +201,7 @@ class Database:
 
         async with self._session() as session:
             # открываем транзакцию
+            # begin() это интерпретация try and except
             async with session.begin():
                 # проверяем, существует ли пользователь
                 user = await session.get(User, user_id)

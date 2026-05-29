@@ -15,6 +15,8 @@ class WeatherClient:
 
     # получение текущей погоды для города
     async def get_weather(self, city: str):
+        # создание параметров запроса для получения погоды
+        # отправка запроса к weather API
         params = {"q": city, "appid": self.api_key, "units": "metric", "lang": "ru"}
         try:
             # создается сессия для запроса к OpenWeather API
